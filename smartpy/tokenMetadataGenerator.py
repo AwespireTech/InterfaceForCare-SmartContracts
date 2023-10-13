@@ -11,7 +11,7 @@ EVENT_DISPLAY_URI = "ipfs://Qmcbhw6JNgu34W62fK2TdFmGf9x1ChRKJ3ZcJGkXsdfH1N"
 EVENT_THUMBNAIL_URI = "ipfs://QmU7dysubZiVA1L5dSc9PKBCB2EueA8fjAjGgbAF5yt2kk"
 EVENT_TOKEN_SYMBOL = "EVETK"
 
-MetadataUrl = "ipfs://???"
+MetadataUrl = "ipfs://bafkreih2cttdmqaz7z4hvdhmf5rdgqajztnqtdyjnm36t4yul2xmffp4ki"
 
 class TokenMetadataGenerator(sp.Contract):
     def __init__(self, addr_data, orders, stewardship_token, event_token, metadata):

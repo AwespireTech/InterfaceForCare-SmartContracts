@@ -1,6 +1,6 @@
 import smartpy as sp
 
-MetadataUrl = "ipfs://undefined"
+MetadataUrl = "ipfs://bafkreigrcgtxfogu2a3aobbt7jalypajg4smqmmxbys5t7mc2aa7p2xcdm"
 
 DefaultBaker = "tz1V16tR1LMKRernkmXzngkfznmEcTGXwDuk"
 TokenFA2 = sp.address("KT1WYxcm8xVKn8kKM2XS9c8MBgdhQbeKJe8M")

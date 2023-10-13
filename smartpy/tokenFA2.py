@@ -10,7 +10,7 @@ import smartpy as sp
 
 admin = sp.address("tz1UikAq5Po4wefKL4WkzAHqmCDVnUC1AKAS")
 factory = sp.address("tz1UikAq5Po4wefKL4WkzAHqmCDVnUC1AKAS")
-MetadataUrl = "ipfs://undefined"
+MetadataUrl = "ipfs://bafkreig4tq2gcklc2zgjjiptyszyxlpp5tyu44qfmkeiu76rxisusmekem"
 
 
 #########

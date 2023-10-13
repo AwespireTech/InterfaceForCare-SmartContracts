@@ -1,0 +1,25 @@
+{
+    "name": "RiverCare Multisig Factory",
+    "description": "This smart contract is used to create a river in the RiverCare project, and the resulting form will be a multisig.",
+    "version": "1.0.0",
+    "changelog": [],
+    "license": "MIT",
+    "authors": [
+        "NakoOn <twitter: @nako_on>"
+    ],
+    "source": {
+        "tools": [
+            "SmartPy"
+        ],
+        "location": []
+    },
+    "interfaces": [
+        "TZIP-016"
+    ],
+    "views": [
+        {
+            "name": "is_multisig",
+            "description": "Return whether the given address is one of the rivercare multisig or not."
+        }
+    ]
+}
