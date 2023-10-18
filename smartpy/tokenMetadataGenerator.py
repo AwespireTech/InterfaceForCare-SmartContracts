@@ -1,17 +1,16 @@
 import smartpy as sp
 
-STEWARDSHIP_DESCRIPTION = "This is the soul-bound stewardship token used to prove care.\n\nThe holder of this token is a member of MultiSig and has the right to participate in discussions."
-STEWARDSHIP_ARTIFACT_URI = "ipfs://QmUDbhUFg87FudxavvvGAZLXGj8tTxvjQNxQeJJpXA9Hmu"
-STEWARDSHIP_DISPLAY_URI = "ipfs://Qmcbhw6JNgu34W62fK2TdFmGf9x1ChRKJ3ZcJGkXsdfH1N"
-STEWARDSHIP_THUMBNAIL_URI = "ipfs://QmU7dysubZiVA1L5dSc9PKBCB2EueA8fjAjGgbAF5yt2kk"
+STEWARDSHIP_ARTIFACT_URI = "ipfs://QmX41L5CLVj4XYBW6ZzDhF4o7Z8Lkr2b3WpDAGLCgUa6RR"
+STEWARDSHIP_DISPLAY_URI = "ipfs://QmeDtCRJhEJkm67MuXPkJQoR5Ui3fPpimb4WeAp9n2JLkk"
+STEWARDSHIP_THUMBNAIL_URI = "ipfs://QmYjYprrgBpMtVZQwJPuqjqwwr7CSmEg7ja8eGyVGQTiY6"
 STEWARDSHIP_TOKEN_SYMBOL = "STETK"
 
-EVENT_ARTIFACT_URI = "ipfs://QmUDbhUFg87FudxavvvGAZLXGj8tTxvjQNxQeJJpXA9Hmu"
-EVENT_DISPLAY_URI = "ipfs://Qmcbhw6JNgu34W62fK2TdFmGf9x1ChRKJ3ZcJGkXsdfH1N"
-EVENT_THUMBNAIL_URI = "ipfs://QmU7dysubZiVA1L5dSc9PKBCB2EueA8fjAjGgbAF5yt2kk"
+EVENT_ARTIFACT_URI = "ipfs://QmXziC8i7FhmRpk6FnRvrkUZHZRj6dwsijmcdA5fxgtzjt"
+EVENT_DISPLAY_URI = "ipfs://Qmak5iJZB9s9FWFfTv6M36nkSQTKRcfH5Nu5Wyhb8GF5GM"
+EVENT_THUMBNAIL_URI = "ipfs://QmQbT6ssZCZecaMLHUTn32VfG1c6iRu2zFz6DaEigNBzca"
 EVENT_TOKEN_SYMBOL = "EVETK"
 
-MetadataUrl = "ipfs://bafkreih2cttdmqaz7z4hvdhmf5rdgqajztnqtdyjnm36t4yul2xmffp4ki"
+MetadataUrl = "ipfs://bafkreifzcdut2wzhwimkqby7qutbyg5zsjqf7qfm5iq7ashpbxwerdyzae"
 
 class TokenMetadataGenerator(sp.Contract):
     def __init__(self, addr_data, orders, stewardship_token, event_token, metadata):
@@ -57,9 +56,10 @@ class TokenMetadataGenerator(sp.Contract):
 
     @sp.onchain_view()
     def gen_stewardship_token(self, params):
-        sp.set_type(params, sp.TRecord(multisig_name = sp.TBytes, generation = sp.TNat, creator = sp.TAddress))
+        sp.set_type(params, sp.TRecord(multisig_name = sp.TBytes, multisig_description = sp.TBytes, generation = sp.TNat, creator = sp.TAddress))
         result = sp.local("result", self.data.stewardship_token)
         result.value["name"] = sp.utils.bytes_of_string("[STEWARDSHIP TOKEN GEN-") + self.data.orders[params.generation] + sp.utils.bytes_of_string("] ") +     params.multisig_name
+        result.value["description"] = params.multisig_description
         result.value["creators"] = sp.pack(params.creator)
         sp.result(result.value)
 
@@ -109,7 +109,6 @@ def test():
         tvalue = sp.TBytes,
         l = {
             sp.string("symbol"): sp.utils.bytes_of_string(STEWARDSHIP_TOKEN_SYMBOL),
-            sp.string("description"): sp.utils.bytes_of_string(STEWARDSHIP_DESCRIPTION),
             sp.string("artifactUri"): sp.utils.bytes_of_string(STEWARDSHIP_ARTIFACT_URI),
             sp.string("displayUri"): sp.utils.bytes_of_string(STEWARDSHIP_DISPLAY_URI),
             sp.string("thumbnailUri"): sp.utils.bytes_of_string(STEWARDSHIP_THUMBNAIL_URI)

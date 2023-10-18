@@ -1,8 +1,18 @@
 {
     "name": "RiverCare Multisig Factory",
     "description": "This smart contract is used to create a river in the RiverCare project, and the resulting form will be a multisig.",
-    "version": "1.0.0",
-    "changelog": [],
+    "version": "1.1.0",
+    "changelog": [
+        {
+            "version": "1.1.0",
+            "content": [
+                "Change the prompt_uri to dataset_uri",
+                "Reformat the storage in multisig",
+                "Add zero_tez verifier in entrypoints",
+                "Add description in multisig"
+            ]
+        }
+    ],
     "license": "MIT",
     "authors": [
         "NakoOn <twitter: @nako_on>"

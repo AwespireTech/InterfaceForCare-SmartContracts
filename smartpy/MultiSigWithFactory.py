@@ -1,10 +1,10 @@
 import smartpy as sp
 
-MetadataUrl = "ipfs://bafkreigrcgtxfogu2a3aobbt7jalypajg4smqmmxbys5t7mc2aa7p2xcdm"
+MetadataUrl = "ipfs://bafkreibdmsqrtl2m5myx42e3x5ubsn4tgf5kqfqjedazwxci6euabtf65q"
 
 DefaultBaker = "tz1V16tR1LMKRernkmXzngkfznmEcTGXwDuk"
-TokenFA2 = sp.address("KT1WYxcm8xVKn8kKM2XS9c8MBgdhQbeKJe8M")
-TokenMetadataGenerator = sp.address("KT1LXX31mWgG88nMHGndVFoRLv5iivRMz4d8")
+TokenFA2 = sp.address("KT1QxN1rKscZuEWE3xsABXNeurZMyoBkDYGc")
+TokenMetadataGenerator = sp.address("KT1F5TgdEDUWH64d8ubFGosi45zbX5uhxrbc")
 
 Admin = sp.address("tz1UikAq5Po4wefKL4WkzAHqmCDVnUC1AKAS")
 
@@ -18,7 +18,7 @@ transfer_tez_type = sp.TRecord(
 
 update_agreement_uri_type = sp.TString
 
-update_prompt_uri_type = sp.TString
+update_dataset_uri_type = sp.TString
 
 update_threshold_type = sp.TRecord(
     ratio_number = sp.TNat,
@@ -38,11 +38,10 @@ lambda_ops_type = sp.TLambda(
     sp.TList(sp.TOperation)
 )
 
-
 proposal_content_type = sp.TVariant(
     transfer_tez = transfer_tez_type,
     update_agreement_uri = update_agreement_uri_type,
-    update_prompt_uri = update_prompt_uri_type,
+    update_dataset_uri = update_dataset_uri_type,
     update_threshold = update_threshold_type,
     update_generation_duration_minute = update_generation_duration_minute_type,
     update_metadata = update_metadata_type,
@@ -106,32 +105,61 @@ class MultiSigFactory(sp.Contract):
 
     def is_admin(self):
         sp.verify(sp.sender == self.data.addresses["admin"], "NOT_ADMIN")
+        
+    def zero_tez(self):
+        sp.verify(sp.amount == sp.tez(0), "TEZOS_NOT_ACCEPTED")
     
     @sp.entry_point
     def default(self):
         sp.send(sp.sender, sp.amount)
 
     @sp.entry_point
-    def create_multisig(self, name, agreement_uri, prompt_uri, contract_metadata):
+    def create_multisig(self, name, description, agreement_uri, dataset_uri, contract_metadata):
+        self.zero_tez()
         sp.set_type(name, sp.TBytes)
+        sp.set_type(description, sp.TBytes)
         sp.set_type(agreement_uri, sp.TString)
-        sp.set_type(prompt_uri, sp.TString)
+        sp.set_type(dataset_uri, sp.TString)
         sp.set_type(contract_metadata, sp.TBytes)
 
         # create multisig
         contract_address = sp.create_contract(
             storage = sp.record(
-                name = name,
-                factory = sp.self_address,
+                info = sp.record(
+                    name = name,
+                    description = description,
+                    generation = sp.nat(0),
+                    generation_duration_minute = self.data.duration_minute.genX
+                ),
+                addresses = sp.record(
+                    factory = sp.self_address,
+                    token_metadata_generator = self.data.addresses["token_metadata_generator"]
+                ),
                 timestamp = sp.record(
                     create_time = sp.now,
                     generation_start_time = sp.now,
                     generation_end_time = sp.now.add_minutes(self.data.duration_minute.gen0)
                 ),
-                generation_duration_minute = self.data.duration_minute.genX,
+                event = sp.record(
+                    event_token_fa2 = self.data.addresses["event_token_fa2"],
+                    next_event_id = sp.nat(0),
+                    event_id_list = sp.list([]),
+                    events = sp.big_map(
+                        tkey = sp.TNat,
+                        tvalue = event_value_type,
+                        l = {}
+                    )
+                ),
+                proposal = sp.record(
+                    next_proposal_id = sp.nat(0),
+                    proposals = sp.big_map(
+                        tkey = sp.TNat,
+                        tvalue = proposal_value_type,
+                        l = {}
+                    )
+                ),
                 agreement_uri = agreement_uri,
-                prompt_uri = prompt_uri,
-                generation = sp.nat(0),
+                dataset_uri = dataset_uri,
                 gen0_stewardship_signatures = sp.big_map(
                     tkey = sp.TAddress,
                     tvalue = sp.TSignature,
@@ -141,22 +169,7 @@ class MultiSigFactory(sp.Contract):
                     fa2 = self.data.addresses["stewardship_token_fa2"],
                     id = sp.nat(0)
                 ),
-                event_token_fa2 = self.data.addresses["event_token_fa2"],
                 threshold = self.data.default_threshold,
-                token_metadata_generator = self.data.addresses["token_metadata_generator"],
-                next_proposal_id = sp.nat(0),
-                proposals = sp.big_map(
-                    tkey = sp.TNat,
-                    tvalue = proposal_value_type,
-                    l = {}
-                ),
-                next_event_id = sp.nat(0),
-                event_id_list = sp.list([]),
-                events = sp.big_map(
-                    tkey = sp.TNat,
-                    tvalue = event_value_type,
-                    l = {}
-                ),
                 metadata = sp.big_map(l = {"": contract_metadata})
             ),
             contract = self.multi_sig, 
@@ -167,17 +180,6 @@ class MultiSigFactory(sp.Contract):
         # create stewardship token
         c_self_create = sp.self_entrypoint("_create_gen0_token")
         sp.transfer(contract_address, sp.mutez(0), c_self_create)
-
-        # c_create = sp.contract(
-        #     sp.TUnit, 
-        #     contract_address, 
-        #     entry_point = "create_gen0_stewardship").open_some()
-        
-        # sp.transfer(
-        #     sp.unit, 
-        #     sp.mutez(0), 
-        #     c_create
-        # )
         
         # record multisig info
         self.data.multisigs[contract_address] = sp.record(
@@ -244,17 +246,39 @@ class MultiSigFactory(sp.Contract):
 class MultiSig(sp.Contract):
     def __init__(self):
         self.init(
-            name = sp.utils.bytes_of_string("River"),
-            factory = TokenFA2,
+            info = sp.record(
+                name = sp.utils.bytes_of_string("River"),
+                description = sp.utils.bytes_of_string("This is a river."),
+                generation = sp.nat(0),
+                generation_duration_minute = sp.int(129600)
+            ),
+            addresses = sp.record(
+                factory = TokenFA2,
+                token_metadata_generator = TokenMetadataGenerator
+            ),
             timestamp = sp.record(
                 create_time = sp.timestamp(0),
                 generation_start_time = sp.timestamp(0),
                 generation_end_time = sp.timestamp(0)
             ),
-            generation_duration_minute = sp.int(129600),
+            event = sp.record(
+                event_token_fa2 = TokenFA2,
+                next_event_id = sp.nat(0),
+                event_id_list = sp.list([]),
+                events = sp.big_map(
+                    tkey = sp.TNat,
+                    tvalue = event_value_type
+                )
+            ),
+            proposal = sp.record(
+                next_proposal_id = sp.nat(0),
+                proposals = sp.big_map(
+                    tkey = sp.TNat,
+                    tvalue = proposal_value_type
+                )
+            ),
             agreement_uri = sp.string(MetadataUrl),
-            prompt_uri = sp.string(MetadataUrl),
-            generation = sp.nat(0),
+            dataset_uri = sp.string(MetadataUrl),
             gen0_stewardship_signatures = sp.big_map(
                 tkey = sp.TAddress,
                 tvalue = sp.TSignature
@@ -263,23 +287,10 @@ class MultiSig(sp.Contract):
                 fa2 = TokenFA2,
                 id = sp.nat(0)
             ),
-            event_token_fa2 = TokenFA2,
             threshold = sp.record(
                 ratio_number = 1,
                 ratio_total = 3,
                 minimum_count = 20
-            ),
-            token_metadata_generator = TokenMetadataGenerator,
-            next_proposal_id = sp.nat(0),
-            proposals = sp.big_map(
-                tkey = sp.TNat,
-                tvalue = proposal_value_type
-            ),
-            next_event_id = sp.nat(0),
-            event_id_list = sp.list([]),
-            events = sp.big_map(
-                tkey = sp.TNat,
-                tvalue = event_value_type
             ),
             metadata = sp.big_map({"":sp.utils.bytes_of_string(MetadataUrl)})
         )
@@ -288,6 +299,9 @@ class MultiSig(sp.Contract):
     def default(self):
         pass
 
+    def zero_tez(self):
+        sp.verify(sp.amount == sp.tez(0), "TEZOS_NOT_ACCEPTED")
+    
     def check_member(self, address):
         balanceResult = sp.view("get_balance_of", self.data.stewardship_token.fa2, sp.list([sp.record(owner=address, token_id=self.data.stewardship_token.id)]), sp.TList(t_balance_of_response)).open_some("open get_balance_of view Error")
         sp.for balanceData in balanceResult:
@@ -295,7 +309,7 @@ class MultiSig(sp.Contract):
 
     def check_valid_time(self):
         sp.verify(sp.now < self.data.timestamp.generation_end_time, "OVER_GENERATION_END_TIME")
-        sp.verify(self.data.generation > 0, "NOT_ACTIVATED_YET")
+        sp.verify(self.data.info.generation > 0, "NOT_ACTIVATED_YET")
 
     def check_threshold(self, approveCount):
         st_holders = sp.view("get_token_holders", self.data.stewardship_token.fa2, self.data.stewardship_token.id, sp.TSet(sp.TAddress)).open_some("open get_token_holders view Error")
@@ -308,7 +322,7 @@ class MultiSig(sp.Contract):
                 sp.verify(proposal_data.amount > sp.tez(0), "CANNOT_SEND_ZERO_TEZ")
             with arg.match("update_agreement_uri") as proposal_data:
                 pass
-            with arg.match("update_prompt_uri") as proposal_data:
+            with arg.match("update_dataset_uri") as proposal_data:
                 pass
             with arg.match("update_threshold") as proposal_data:
                 st_holders = sp.view("get_token_holders", self.data.stewardship_token.fa2, self.data.stewardship_token.id, sp.TSet(sp.TAddress)).open_some("open get_token_holders view Error")
@@ -325,43 +339,43 @@ class MultiSig(sp.Contract):
     
     def execute_transfer_tez(self, content, proposal_id):
         sp.send(content.to_, content.amount)
-        self.data.proposals[proposal_id].is_resolved = True
+        self.data.proposal.proposals[proposal_id].is_resolved = True
         
     def execute_update_agreement_uri(self, content, proposal_id):
         self.data.agreement_uri = content
-        self.data.proposals[proposal_id].is_resolved = True
+        self.data.proposal.proposals[proposal_id].is_resolved = True
         
-    def execute_update_prompt_uri(self, content, proposal_id):
-        self.data.prompt_uri = content
-        self.data.proposals[proposal_id].is_resolved = True
+    def execute_update_dataset_uri(self, content, proposal_id):
+        self.data.dataset_uri = content
+        self.data.proposal.proposals[proposal_id].is_resolved = True
 
     def execute_update_threshold(self, content, proposal_id):
         self.data.threshold = content
-        self.data.proposals[proposal_id].is_resolved = True
+        self.data.proposal.proposals[proposal_id].is_resolved = True
 
     def execute_update_generation_duration_minute(self, content, proposal_id):
-        self.data.generation_duration_minute = content
-        self.data.proposals[proposal_id].is_resolved = True
+        self.data.info.generation_duration_minute = content
+        self.data.proposal.proposals[proposal_id].is_resolved = True
 
     def execute_update_metadata(self, content, proposal_id):
         self.data.metadata[content.key] = content.value
-        self.data.proposals[proposal_id].is_resolved = True
+        self.data.proposal.proposals[proposal_id].is_resolved = True
 
     def execute_lambda_ops(self, content, proposal_id):
         lambda_ = sp.compute(content)
         operations = lambda_(sp.unit)
         sp.add_operations(operations)
-        self.data.proposals[proposal_id].is_resolved = True
+        self.data.proposal.proposals[proposal_id].is_resolved = True
 
 
     def execute_proposal(self, proposal_id):
-        with self.data.proposals[proposal_id].content.match_cases() as arg:
+        with self.data.proposal.proposals[proposal_id].content.match_cases() as arg:
             with arg.match("transfer_tez") as proposal_data:
                 self.execute_transfer_tez(proposal_data, proposal_id)
             with arg.match("update_agreement_uri") as proposal_data:
                 self.execute_update_agreement_uri(proposal_data, proposal_id)
-            with arg.match("update_prompt_uri") as proposal_data:
-                self.execute_update_prompt_uri(proposal_data, proposal_id)
+            with arg.match("update_dataset_uri") as proposal_data:
+                self.execute_update_dataset_uri(proposal_data, proposal_id)
             with arg.match("update_threshold") as proposal_data:
                 self.execute_update_threshold(proposal_data, proposal_id)
             with arg.match("update_generation_duration_minute") as proposal_data:
@@ -373,43 +387,45 @@ class MultiSig(sp.Contract):
 
     @sp.entry_point
     def create_proposal(self, content, reserve):
+        self.zero_tez()
         self.check_member(sp.sender)
         self.check_valid_time()
         sp.set_type(content, proposal_content_type)
         sp.set_type(reserve, sp.TMap(sp.TBytes, sp.TBytes))
         self.validate_proposal(content)
-        self.data.proposals[self.data.next_proposal_id] = sp.record(
+        self.data.proposal.proposals[self.data.proposal.next_proposal_id] = sp.record(
             approved = sp.set([]),
             is_resolved = sp.bool(False),
             proposer = sp.sender,
             create_time = sp.now,
-            generation = self.data.generation,
+            generation = self.data.info.generation,
             content = content
         )
-        self.data.next_proposal_id += 1
+        self.data.proposal.next_proposal_id += 1
         
     @sp.entry_point
     def sign_proposal(self, proposal_id):
-        
+        self.zero_tez()
         self.check_member(sp.sender)
         self.check_valid_time()
-        sp.verify(self.data.proposals.contains(proposal_id), "PROPOSAL_ID_NOT_EXISTED")
+        sp.verify(self.data.proposal.proposals.contains(proposal_id), "PROPOSAL_ID_NOT_EXISTED")
         
-        proposal = sp.compute(self.data.proposals[proposal_id])
+        proposal = sp.compute(self.data.proposal.proposals[proposal_id])
         sp.verify(~proposal.is_resolved, "PROPOSAL_IS_RESOLVED")
-        sp.verify(self.data.generation == proposal.generation, "NOT_CURRENT_GENERATION_PROPOSAL")
+        sp.verify(self.data.info.generation == proposal.generation, "NOT_CURRENT_GENERATION_PROPOSAL")
         sp.verify(~proposal.approved.contains(sp.sender), "PROPOSAL_APPROVED_ALREADY")
         
-        self.data.proposals[proposal_id].approved.add(sp.sender)
+        self.data.proposal.proposals[proposal_id].approved.add(sp.sender)
 
     @sp.entry_point
     def resolve_proposal(self, proposal_id):
+        self.zero_tez()
         # Check basic limitation
         self.check_valid_time()
-        sp.verify(self.data.proposals.contains(proposal_id), "PROPOSAL_ID_NOT_EXISTED")
-        proposal = sp.compute(self.data.proposals[proposal_id])
+        sp.verify(self.data.proposal.proposals.contains(proposal_id), "PROPOSAL_ID_NOT_EXISTED")
+        proposal = sp.compute(self.data.proposal.proposals[proposal_id])
         sp.verify(~proposal.is_resolved, "PROPOSAL_IS_RESOLVED")
-        sp.verify(self.data.generation == proposal.generation, "NOT_CURRENT_GENERATION_PROPOSAL")
+        sp.verify(self.data.info.generation == proposal.generation, "NOT_CURRENT_GENERATION_PROPOSAL")
         # Check threshold
         sp.verify(self.check_threshold(sp.len(proposal.approved)), "NOT_REACH_THRESHOLD")
         # execute
@@ -417,6 +433,7 @@ class MultiSig(sp.Contract):
 
     @sp.entry_point
     def create_event(self, name, description, edition):
+        self.zero_tez()
         # check member & valid time
         self.check_member(sp.sender)
         self.check_valid_time()
@@ -426,7 +443,7 @@ class MultiSig(sp.Contract):
         # generate event token ID
         event_token_id = sp.compute(sp.view(
             "get_next_event_token_id", 
-            self.data.event_token_fa2, 
+            self.data.event.event_token_fa2, 
             sp.unit, 
             sp.TNat
         ).open_some("open get_next_event_token_id view Error"))
@@ -434,12 +451,12 @@ class MultiSig(sp.Contract):
         # generate event metadata
         event_token_metadata = sp.view(
             "gen_event_token", 
-            self.data.token_metadata_generator, 
+            self.data.addresses.token_metadata_generator, 
             sp.record(
                 creator = sp.self_address,
                 event_description = description,
-                generation = self.data.generation,
-                multisig_name = self.data.name,
+                generation = self.data.info.generation,
+                multisig_name = self.data.info.name,
                 event_name = name
             ), 
             sp.TMap(sp.TString, sp.TBytes)
@@ -454,7 +471,7 @@ class MultiSig(sp.Contract):
                     token_info = sp.TMap(sp.TString, sp.TBytes)
                 )
             ), 
-            self.data.event_token_fa2, 
+            self.data.event.event_token_fa2, 
             entry_point = "create_token").open_some()
         sp.transfer(
             sp.list([
@@ -469,36 +486,37 @@ class MultiSig(sp.Contract):
         )
         
         # record info in storage
-        self.data.events[self.data.next_event_id] = sp.record(
+        self.data.event.events[self.data.event.next_event_id] = sp.record(
             approved = sp.set([]),
             passed = False,
             proposer = sp.sender,
             create_time = sp.now,
-            generation = self.data.generation,
+            generation = self.data.info.generation,
             token_id = event_token_id,
             amount = edition,
             claims = sp.map(l={})
         )
-        self.data.event_id_list.push(self.data.next_event_id)
-        self.data.next_event_id += 1
+        self.data.event.event_id_list.push(self.data.event.next_event_id)
+        self.data.event.next_event_id += 1
 
     @sp.entry_point
     def claim_event(self, public_key, signature, event_id):
+        self.zero_tez()
         self.check_valid_time()
         # check public key matching with sender's key hash
         sp.verify(sp.sender == sp.to_address(sp.implicit_account(sp.hash_key(public_key))), "PUBLIC_KEY_ERROR: not matched with sender")
         # check signature 
         sp.check_signature(public_key, signature, self.data.agreement_uri)
-        event_data = sp.compute(self.data.events[event_id])
+        event_data = sp.compute(self.data.event.events[event_id])
         # check re-claim
         sp.verify(~event_data.claims.contains(sp.sender), "CANNOT_CLAIM_TWICE")
         # check generation
-        sp.verify(self.data.generation == event_data.generation, "NOT_CURRENT_GENERATION_EVENT")
+        sp.verify(self.data.info.generation == event_data.generation, "NOT_CURRENT_GENERATION_EVENT")
         # check amount
         sp.if event_data.amount.is_some():
             event_edition = event_data.amount.open_some("open amount Error")
             # minus the edtion if edtion is limited
-            self.data.events[event_id].amount = sp.some(sp.as_nat(event_edition - 1, "EVENT_EDITION_INSUFFICIENT"))
+            self.data.event.events[event_id].amount = sp.some(sp.as_nat(event_edition - 1, "EVENT_EDITION_INSUFFICIENT"))
         
         # mint event token
         c_fa2 = sp.contract(
@@ -509,7 +527,7 @@ class MultiSig(sp.Contract):
                     token_id = sp.TNat
                 )
             ), 
-            self.data.event_token_fa2, 
+            self.data.event.event_token_fa2, 
             entry_point = "mint").open_some()
         sp.transfer(
             sp.list([
@@ -524,26 +542,28 @@ class MultiSig(sp.Contract):
         )
         
         # record signature into storage
-        self.data.events[event_id].claims[sp.sender] = signature
+        self.data.event.events[event_id].claims[sp.sender] = signature
 
     @sp.entry_point
     def approve_event(self, event_id):
+        self.zero_tez()
         self.check_member(sp.sender)
         self.check_valid_time()
-        sp.verify(self.data.events.contains(event_id), "EVENT_ID_NOT_EXISTED")
+        sp.verify(self.data.event.events.contains(event_id), "EVENT_ID_NOT_EXISTED")
         
-        event = sp.compute(self.data.events[event_id])
-        sp.verify(self.data.generation == event.generation, "NOT_CURRENT_GENERATION_PROPOSAL")
+        event = sp.compute(self.data.event.events[event_id])
+        sp.verify(self.data.info.generation == event.generation, "NOT_CURRENT_GENERATION_PROPOSAL")
         sp.verify(~event.approved.contains(sp.sender), "EVENT_APPROVED_ALREADY")
         
-        self.data.events[event_id].approved.add(sp.sender)
+        self.data.event.events[event_id].approved.add(sp.sender)
 
     @sp.entry_point
     def create_gen0_stewardship(self):
+        self.zero_tez()
         # check sender
-        sp.verify(sp.sender == self.data.factory, "ONLY_FACTORY_CAN_CREATE")
+        sp.verify(sp.sender == self.data.addresses.factory, "ONLY_FACTORY_CAN_CREATE")
         # check generation
-        sp.verify(self.data.generation == 0, "GENERATION_INCORRECT")
+        sp.verify(self.data.info.generation == 0, "GENERATION_INCORRECT")
         # check stewardship token id
         sp.verify(self.data.stewardship_token.id == 0, "CREATE_ALREADY")
         
@@ -558,10 +578,11 @@ class MultiSig(sp.Contract):
         # generate stewardship metadata
         stewardship_token_metadata = sp.view(
             "gen_stewardship_token", 
-            self.data.token_metadata_generator, 
+            self.data.addresses.token_metadata_generator, 
             sp.record(
                 generation = sp.nat(1),
-                multisig_name = self.data.name,
+                multisig_name = self.data.info.name,
+                multisig_description = self.data.info.description,
                 creator = sp.self_address
             ), 
             sp.TMap(sp.TString, sp.TBytes)
@@ -592,8 +613,9 @@ class MultiSig(sp.Contract):
     
     @sp.entry_point
     def claim_gen0_stewardship(self, public_key, signature):
+        self.zero_tez()
         # check generation
-        sp.verify(self.data.generation == 0, "GENERATION_ERROR")
+        sp.verify(self.data.info.generation == 0, "GENERATION_ERROR")
         # check time
         sp.verify(sp.now <= self.data.timestamp.generation_end_time, "CLAIM_EXPIRED")
         # check public key matching with sender's key hash
@@ -631,8 +653,9 @@ class MultiSig(sp.Contract):
 
     @sp.entry_point()
     def activate(self):
+        self.zero_tez()
         # check generation
-        sp.verify(self.data.generation == 0, "GENEATION_ERROR")
+        sp.verify(self.data.info.generation == 0, "GENEATION_ERROR")
         # check time
         sp.verify(sp.now > self.data.timestamp.generation_end_time, "STILL_IN_CLAIMING_TIME")
         # check limitation
@@ -642,23 +665,24 @@ class MultiSig(sp.Contract):
 
         # set to new generation
         self.data.timestamp.generation_start_time = sp.now
-        self.data.timestamp.generation_end_time = sp.now.add_minutes(self.data.generation_duration_minute)
-        self.data.generation = 1
+        self.data.timestamp.generation_end_time = sp.now.add_minutes(self.data.info.generation_duration_minute)
+        self.data.info.generation = 1
     
     @sp.entry_point()
     def reactivate(self):
+        self.zero_tez()
         # check generation
-        sp.verify(self.data.generation > 0, "GENEATION_ERROR")
+        sp.verify(self.data.info.generation > 0, "GENEATION_ERROR")
         # check time
         sp.verify(sp.now > self.data.timestamp.generation_end_time, "STILL_IN_GENERATION_TIME")
 
         # calculate apporval in all events 
         newStHolders = sp.local("newStHolders", sp.map(l={}, tkey=sp.TAddress, tvalue=sp.TNat))
-        sp.for event_id in self.data.event_id_list:
-            event_data = sp.compute(self.data.events[event_id])
+        sp.for event_id in self.data.event.event_id_list:
+            event_data = sp.compute(self.data.event.events[event_id])
             sp.if self.check_threshold(sp.len(event_data.approved)):
-                self.data.events[event_id].passed = True
-                event_holders = sp.view("get_token_holders", self.data.event_token_fa2, event_data.token_id, sp.TSet(sp.TAddress)).open_some("open get_token_holders view Error")
+                self.data.event.events[event_id].passed = True
+                event_holders = sp.view("get_token_holders", self.data.event.event_token_fa2, event_data.token_id, sp.TSet(sp.TAddress)).open_some("open get_token_holders view Error")
                 sp.for holder in event_holders.elements():
                     sp.if ~newStHolders.value.contains(holder):
                         newStHolders.value[holder] = 0
@@ -678,10 +702,11 @@ class MultiSig(sp.Contract):
         # generate stewardship metadata
         stewardship_token_metadata = sp.view(
             "gen_stewardship_token", 
-            self.data.token_metadata_generator, 
+            self.data.addresses.token_metadata_generator, 
             sp.record(
-                generation = self.data.generation + 1,
-                multisig_name = self.data.name,
+                generation = self.data.info.generation + 1,
+                multisig_name = self.data.info.name,
+                multisig_description = self.data.info.description,
                 creator = sp.self_address
             ), 
             sp.TMap(sp.TString, sp.TBytes)
@@ -728,7 +753,7 @@ class MultiSig(sp.Contract):
                     token_id = sp.TNat
                 )
             ), 
-            self.data.event_token_fa2, 
+            self.data.event.event_token_fa2, 
             entry_point = "mint").open_some()
         sp.transfer(
             mintList.value, 
@@ -738,14 +763,14 @@ class MultiSig(sp.Contract):
         
         # set to new generation
         self.data.timestamp.generation_start_time = sp.now
-        self.data.timestamp.generation_end_time = sp.now.add_minutes(self.data.generation_duration_minute)
-        self.data.generation += 1
-        self.data.event_id_list = sp.list([])
+        self.data.timestamp.generation_end_time = sp.now.add_minutes(self.data.info.generation_duration_minute)
+        self.data.info.generation += 1
+        self.data.event.event_id_list = sp.list([])
 
     
     @sp.onchain_view()
     def is_alive(self):
-        sp.result((self.data.generation > 0) & (sp.now <= self.data.timestamp.generation_end_time))
+        sp.result((self.data.info.generation > 0) & (sp.now <= self.data.timestamp.generation_end_time))
         
     @sp.onchain_view()
     def get_all_user(self):
@@ -755,10 +780,10 @@ class MultiSig(sp.Contract):
 @sp.add_test(name = "DID-MultiSig Test")
 def test():
     scenario = sp.test_scenario()
-    # scenario.h1("DID-MultiSig contract")
+    scenario.h1("DID-MultiSig contract")
     
-    # c = MultiSig()
-    # scenario += c
+    c = MultiSig()
+    scenario += c
     
     scenario.h2("DID-Contract Factory")
 
@@ -780,6 +805,6 @@ def test():
     # c_factory.create_multisig(
     #     name = sp.utils.bytes_of_string("123River"), 
     #     agreement_uri = sp.string("ipfs://agreement"), 
-    #     prompt_uri = sp.string("ipfs://prompt"), 
+    #     dataset_uri = sp.string("ipfs://prompt"), 
     #     contract_metadata = sp.utils.bytes_of_string("ipfs://123River-metadata")
     # )
