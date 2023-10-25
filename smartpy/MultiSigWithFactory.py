@@ -1,10 +1,11 @@
 import smartpy as sp
 
-MetadataUrl = "ipfs://bafkreibdmsqrtl2m5myx42e3x5ubsn4tgf5kqfqjedazwxci6euabtf65q"
+MetadataUrl = "ipfs://bafkreib3tcjga2piffydhk3bb773qpikqcjdaip3ibpdlmlgokusodwj4u"
 
 DefaultBaker = "tz1V16tR1LMKRernkmXzngkfznmEcTGXwDuk"
 TokenFA2 = sp.address("KT1QxN1rKscZuEWE3xsABXNeurZMyoBkDYGc")
 TokenMetadataGenerator = sp.address("KT1F5TgdEDUWH64d8ubFGosi45zbX5uhxrbc")
+PayloadGenerator = sp.address("KT1EwMY7edPs6L1JNkEAyTU5qVSwZfVkYi5i")
 
 Admin = sp.address("tz1UikAq5Po4wefKL4WkzAHqmCDVnUC1AKAS")
 
@@ -16,9 +17,9 @@ transfer_tez_type = sp.TRecord(
     amount = sp.TMutez
 )
 
-update_agreement_uri_type = sp.TString
+update_agreement_uri_type = sp.TBytes
 
-update_dataset_uri_type = sp.TString
+update_dataset_uri_type = sp.TBytes
 
 update_threshold_type = sp.TRecord(
     ratio_number = sp.TNat,
@@ -118,8 +119,8 @@ class MultiSigFactory(sp.Contract):
         self.zero_tez()
         sp.set_type(name, sp.TBytes)
         sp.set_type(description, sp.TBytes)
-        sp.set_type(agreement_uri, sp.TString)
-        sp.set_type(dataset_uri, sp.TString)
+        sp.set_type(agreement_uri, sp.TBytes)
+        sp.set_type(dataset_uri, sp.TBytes)
         sp.set_type(contract_metadata, sp.TBytes)
 
         # create multisig
@@ -133,7 +134,8 @@ class MultiSigFactory(sp.Contract):
                 ),
                 addresses = sp.record(
                     factory = sp.self_address,
-                    token_metadata_generator = self.data.addresses["token_metadata_generator"]
+                    token_metadata_generator = self.data.addresses["token_metadata_generator"],
+                    payload_generator = self.data.addresses["payload_generator"]
                 ),
                 timestamp = sp.record(
                     create_time = sp.now,
@@ -254,7 +256,8 @@ class MultiSig(sp.Contract):
             ),
             addresses = sp.record(
                 factory = TokenFA2,
-                token_metadata_generator = TokenMetadataGenerator
+                token_metadata_generator = TokenMetadataGenerator,
+                payload_generator = PayloadGenerator
             ),
             timestamp = sp.record(
                 create_time = sp.timestamp(0),
@@ -277,8 +280,8 @@ class MultiSig(sp.Contract):
                     tvalue = proposal_value_type
                 )
             ),
-            agreement_uri = sp.string(MetadataUrl),
-            dataset_uri = sp.string(MetadataUrl),
+            agreement_uri = sp.utils.bytes_of_string(MetadataUrl),
+            dataset_uri = sp.utils.bytes_of_string(MetadataUrl),
             gen0_stewardship_signatures = sp.big_map(
                 tkey = sp.TAddress,
                 tvalue = sp.TSignature
@@ -506,7 +509,8 @@ class MultiSig(sp.Contract):
         # check public key matching with sender's key hash
         sp.verify(sp.sender == sp.to_address(sp.implicit_account(sp.hash_key(public_key))), "PUBLIC_KEY_ERROR: not matched with sender")
         # check signature 
-        sp.check_signature(public_key, signature, self.data.agreement_uri)
+        payload = sp.view("gen_payload", self.data.addresses.payload_generator, self.data.agreement_uri, sp.TBytes).open_some("open gen_payload view Error")
+        sp.verify(sp.check_signature(public_key, signature, payload), "SIGNATURE_NOT_MATCHED")
         event_data = sp.compute(self.data.event.events[event_id])
         # check re-claim
         sp.verify(~event_data.claims.contains(sp.sender), "CANNOT_CLAIM_TWICE")
@@ -621,7 +625,8 @@ class MultiSig(sp.Contract):
         # check public key matching with sender's key hash
         sp.verify(sp.sender == sp.to_address(sp.implicit_account(sp.hash_key(public_key))), "PUBLIC_KEY_ERROR: not matched with sender")
         # check signature 
-        sp.check_signature(public_key, signature, self.data.agreement_uri)
+        payload = sp.view("gen_payload", self.data.addresses.payload_generator, self.data.agreement_uri, sp.TBytes).open_some("open gen_payload view Error")
+        sp.verify(sp.check_signature(public_key, signature, payload), "SIGNATURE_NOT_MATCHED")
         # check re-claim
         sp.verify(~self.data.gen0_stewardship_signatures.contains(sp.sender), "CANNOT_CLAIM_TWICE")
         
@@ -780,8 +785,8 @@ class MultiSig(sp.Contract):
 @sp.add_test(name = "DID-MultiSig Test")
 def test():
     scenario = sp.test_scenario()
-    scenario.h1("DID-MultiSig contract")
     
+    scenario.h1("DID-MultiSig contract")
     c = MultiSig()
     scenario += c
     
@@ -792,6 +797,7 @@ def test():
     addressesMap["stewardship_token_fa2"] = TokenFA2
     addressesMap["event_token_fa2"] = TokenFA2
     addressesMap["token_metadata_generator"] = TokenMetadataGenerator
+    addressesMap["payload_generator"] = PayloadGenerator
 
     addresses = sp.big_map(
         tkey = sp.TString,

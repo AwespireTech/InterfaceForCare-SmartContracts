@@ -1,0 +1,25 @@
+{
+    "name": "RiverCare Signing Payload Generator",
+    "description": "Tools for generating signing payloads for agreement_uri.",
+    "version": "1.0.0",
+    "changelog": [],
+    "license": "MIT",
+    "authors": [
+        "NakoOn <twitter: @nako_on>"
+    ],
+    "source": {
+        "tools": [
+            "SmartPy"
+        ],
+        "location": []
+    },
+    "interfaces": [
+        "TZIP-016"
+    ],
+    "views": [
+        {
+            "name": "gen_payload",
+            "description": "Return signing payload for function sp.check_signature()."
+        }
+    ]
+}

@@ -1,8 +1,21 @@
 {
     "name": "RiverCare Multisig Factory",
     "description": "This smart contract is used to create a river in the RiverCare project, and the resulting form will be a multisig.",
-    "version": "1.1.0",
+    "version": "1.2.1",
     "changelog": [
+        {
+            "version": "1.2.1",
+            "content": [
+                "BUG FIXED: set sp.verify after checking signature"
+            ]
+        },
+        {
+            "version": "1.2.0",
+            "content": [
+                "Change the type of dataset_uri & agreement_uri from STRING to BYTE",
+                "Add a payload generator for checking the specific format of signature"
+            ]
+        },
         {
             "version": "1.1.0",
             "content": [
