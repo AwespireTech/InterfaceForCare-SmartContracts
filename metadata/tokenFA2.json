@@ -1,0 +1,38 @@
+{
+    "name": "Stewardship & Event token FA2",
+    "description": "This FA2 collection stores all stewardship and event tokens in the project, and also provides multisig functions to view holders and mint.",
+    "version": "1.0.0",
+    "changelog": [],
+    "license": "MIT",
+    "authors": [
+        "NakoOn <twitter: @nako_on>"
+    ],
+    "source": {
+        "tools": [
+            "SmartPy"
+        ],
+        "location": []
+    },
+    "interfaces": [
+        "TZIP-012",
+        "TZIP-016"
+    ],
+    "views": [
+        {
+            "name": "get_balance_of",
+            "description": "Get the current balance for a user of the contract."
+        },
+        {
+            "name": "get_next_event_token_id",
+            "description": "Get the next_event_token_id in the storage."
+        },
+        {
+            "name": "get_next_stewardship_token_id",
+            "description": "Get the get_next_stewardship_token_id in the storage."
+        },
+        {
+            "name": "get_token_holders",
+            "description": "Get all the token holders from a token ID."
+        }
+    ]
+}

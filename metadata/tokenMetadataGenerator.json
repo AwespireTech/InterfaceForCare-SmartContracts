@@ -1,0 +1,37 @@
+{
+    "name": "RiverCare Token Metadata Generator",
+    "description": "Save the metadata templates for stewardship token and event token in RiverCare project.",
+    "version": "1.1.0",
+    "changelog": [
+        {
+            "version": "1.1.0",
+            "content": [
+                "Fill in the correct token metadata IPFS data",
+                "The description of the stewardship token changed to be passed in as a parameter"
+            ]
+        }
+    ],
+    "license": "MIT",
+    "authors": [
+        "NakoOn <twitter: @nako_on>"
+    ],
+    "source": {
+        "tools": [
+            "SmartPy"
+        ],
+        "location": []
+    },
+    "interfaces": [
+        "TZIP-016"
+    ],
+    "views": [
+        {
+            "name": "gen_event_token",
+            "description": "Return event token metadata in FA2 token_info format based on input data."
+        },
+        {
+            "name": "gen_stewardship_token",
+            "description": "Return stewardship token metadata in FA2 token_info format based on input data."
+        }
+    ]
+}
